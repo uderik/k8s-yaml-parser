@@ -102,12 +102,14 @@ func printUsage() {
 	fmt.Println("              'kind-name'   - Flat structure with kind-name.yaml files (default)")
 	fmt.Println("              'kind/name'   - Group by kind in directories")
 	fmt.Println("              'service'     - Group by service in directories")
+	fmt.Println("  --force     Ignore if output directory is not empty")
 	fmt.Println("\nExamples:")
 	fmt.Println("  yaml_parser --file=1.yaml --outdir=./manifests")
 	fmt.Println("  yaml_parser --file=1.yaml --outdir=./manifests --remove=\"status:.*,generation:.*\"")
 	fmt.Println("  yaml_parser --file=1.yaml --outdir=./manifests --format=kind/name")
 	fmt.Println("  yaml_parser --file=1.yaml --outdir=./manifests --format=service")
 	fmt.Println("  cat 1.yaml | yaml_parser --outdir=./manifests")
+	fmt.Println("  yaml_parser --file=1.yaml --outdir=./manifests --force")
 	fmt.Println("")
 }
 
@@ -117,6 +119,7 @@ func main() {
 	outputDir := flag.String("outdir", "", "Output directory for parsed manifests")
 	removePatterns := flag.String("remove", "", "Comma-separated patterns to remove from each manifest")
 	format := flag.String("format", "kind-name", "Output filename format: 'kind-name', 'kind/name', or 'service'")
+	force := flag.Bool("force", false, "Ignore if output directory is not empty")
 	help := flag.Bool("help", false, "Show usage information")
 	flag.Parse()
 
@@ -165,11 +168,22 @@ func main() {
 	}
 
 	// Create the output directory if it doesn't exist
-	if err := os.RemoveAll(*outputDir); err != nil {
-		log.Fatalf("Error removing previous output directory: %v", err)
-	}
-	if err := os.MkdirAll(*outputDir, 0755); err != nil {
-		log.Fatalf("Error creating output directory: %v", err)
+	// Check if directory exists
+	if _, err := os.Stat(*outputDir); os.IsNotExist(err) {
+		// Directory doesn't exist, create it
+		if err := os.MkdirAll(*outputDir, 0755); err != nil {
+			log.Fatalf("Error creating output directory: %v", err)
+		}
+	} else {
+		// Directory exists, check if it's empty
+		entries, err := os.ReadDir(*outputDir)
+		if err != nil {
+			log.Fatalf("Error reading output directory: %v", err)
+		}
+
+		if len(entries) > 0 && !*force {
+			log.Fatalf("Output directory '%s' is not empty. Use --force flag to ignore this warning.", *outputDir)
+		}
 	}
 
 	// Prepare patterns to remove
